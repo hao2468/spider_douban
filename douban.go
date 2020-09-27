@@ -27,9 +27,9 @@ var newdoc *goquery.Document
 var endflag bool = true
 
 type Cfg struct {
-	Filepath string `json:"filepath"`
-	Url      string `json:"url"`
-	Grade    int    `json:"grade"`
+	Filepath string  `json:"filepath"`
+	Url      string  `json:"url"`
+	Grade    float32 `json:"grade"`
 }
 
 func main() {
@@ -44,7 +44,7 @@ func main() {
 		fmt.Println("解析配置文件失败")
 		return
 	}
-	fmt.Println("cfg:", cfg)
+	fmt.Println("开始爬取...")
 	endch := make(chan int, 1)
 	outputch := make(chan string, 10)
 	go ender(endch)
@@ -101,12 +101,12 @@ func main() {
 	ticker := time.NewTicker(5 * time.Second)
 	<-ticker.C
 	endch <- 1
-	fmt.Println("退出")
+	fmt.Println("爬取已完成，退出")
 }
 
 func clickmore(res *string, runch chan int) chromedp.Tasks {
 	return chromedp.Tasks{
-		chromedp.Sleep(500 * time.Millisecond),
+		chromedp.Sleep(200 * time.Millisecond),
 		chromedp.Click(".more", chromedp.ByQuery),
 		chromedp.OuterHTML(`body`, res, chromedp.ByQuery),
 		chromedp.ActionFunc(func(ctx context.Context) error {
@@ -116,10 +116,10 @@ func clickmore(res *string, runch chan int) chromedp.Tasks {
 	}
 }
 
-func parseWeb(doc *goquery.Document, ch chan string, targetGrade int) {
+func parseWeb(doc *goquery.Document, ch chan string, targetGrade float32) {
 	doc.Find("a[class=item]").Each(func(i int, s *goquery.Selection) {
 		grade := s.Find("p").Find("strong").Remove().Text()
-		if gradefloat, _ := strconv.ParseFloat(grade, 32); int(gradefloat) > targetGrade {
+		if gradefloat, _ := strconv.ParseFloat(grade, 32); float32(gradefloat) > targetGrade {
 			name := strings.Replace(s.Find("p").Text(), "\n", "", -1)
 			name = strings.Replace(name, " ", "", -1)
 			str := fmt.Sprintln(name, "	评分:", grade)
@@ -155,7 +155,7 @@ func ender(endch chan int) {
 			if i == 1 {
 				return
 			}
-			fmt.Println("爬取完成,等待退出")
+			fmt.Println("爬取完成,等待文件写入完成...")
 			endflag = false
 		}
 	}
