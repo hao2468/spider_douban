@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -15,10 +16,6 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/chromedp/chromedp"
 )
-
-// var url string = "https://movie.douban.com/tv/#!type=tv&tag=%E6%97%A5%E6%9C%AC%E5%8A%A8%E7%94%BB&sort=recommend&page_limit=20&page_start=0"
-// var dir string = "anime_douban.txt"
-// var target_grade int = 9
 
 var old string
 var new string
@@ -49,12 +46,27 @@ func main() {
 	outputch := make(chan string, 10)
 	go ender(endch)
 	parentctx := context.Background()
+	sysType := runtime.GOOS
+	var ctx context.Context
+	if sysType == "linux" {
+		opts := []chromedp.ExecAllocatorOption{
+			chromedp.Flag("headless", false),
+			chromedp.UserAgent(`Mozilla/5.0 (Windows NT 6.3; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.103 Safari/537.36`),
+		}
+		opts = append(chromedp.DefaultExecAllocatorOptions[:], opts...)
+		parentctx, _ = chromedp.NewExecAllocator(parentctx, opts...)
+	}
 	ctx, cancel := chromedp.NewContext(parentctx, chromedp.WithLogf(log.Printf))
 	defer cancel()
-	go outputtofile(ctx, cfg.Filepath, outputch)
-	chromedp.Run(ctx, chromedp.Tasks{
+	go outputtofile(ctx, cfg.Filepath, outputch, endch)
+	err = chromedp.Run(ctx, chromedp.Tasks{
 		chromedp.Navigate(cfg.Url),
 	})
+	if err != nil {
+		fmt.Println("创建chrome实例失败，error:", err)
+		endch <- -1
+		return
+	}
 	var doc *goquery.Document
 	for endflag {
 		fmt.Println("加载新的动态页面...")
@@ -132,8 +144,8 @@ func parseWeb(doc *goquery.Document, ch chan string, targetGrade float32) {
 	})
 }
 
-func outputtofile(ctx context.Context, filepath string, ch chan string) {
-	file, err := os.OpenFile(filepath, os.O_APPEND|os.O_CREATE, 0744)
+func outputtofile(ctx context.Context, filepath string, ch chan string, enderch chan int) {
+	file, err := os.OpenFile(filepath, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0744)
 	defer file.Close()
 	if err != nil {
 		panic("打开文件失败")
@@ -141,7 +153,11 @@ func outputtofile(ctx context.Context, filepath string, ch chan string) {
 	for {
 		select {
 		case str := <-ch:
-			fmt.Fprintln(file, str)
+			_, err := fmt.Fprintln(file, str)
+			if err != nil {
+				fmt.Println("文件写入失败,error:", err)
+				enderch <- -1
+			}
 		case <-ctx.Done():
 			return
 		}
@@ -149,14 +165,16 @@ func outputtofile(ctx context.Context, filepath string, ch chan string) {
 }
 
 func ender(endch chan int) {
-	for {
-		select {
-		case i := <-endch:
-			if i == 1 {
-				return
-			}
-			fmt.Println("爬取完成,等待文件写入完成...")
-			endflag = false
-		}
+	switch <-endch {
+	case 1:
+		return
+	case 0:
+		fmt.Println("爬取完成,等待文件写入完成...")
+		endflag = false
+		return
+	case -1:
+		fmt.Println("爬取失败,等待程序退出...")
+		endflag = false
+		return
 	}
 }
