@@ -18,4 +18,4 @@
 }
 ```
 
-本项目依赖于`github.com/chromedp/chromedp`，该模块用于模拟谷歌浏览器浏览动作，程序运行环境需包含谷歌浏览器
+本项目依赖于`github.com/chromedp/chromedp`，该模块用于模拟谷歌浏览器浏览动作，程序运行环境需包含谷歌浏览器或安装headless-shell
